@@ -6,7 +6,7 @@ const logger = require('./logger');
 const { BOT_TOKEN, ALLOWED_USERS } = require('./config');
 const { parseInput } = require('./parser');
 const { resolveDate } = require('./dateResolver');
-const { createEvent, deleteEventsByDay, listEventsByDay } = require('./calendar');
+const { createEvent, deleteEventsByDay, listEventsByDay, checkConflicts } = require('./calendar');
 const { formatEventTitle } = require('./titleFormatter');
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
@@ -14,10 +14,51 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 // In-memory undo buffer for the most recent /clear operation
 let undoBuffer = null;
 
+// Pending creations awaiting conflict confirmation
+const pendingCreations = {}; // chatId -> { type: 'create', events: [...], conflicts: [...] }
+
 bot.on('message', async (msg) => {
   const requestId = crypto.randomUUID();
 
   if (!msg.text) return;
+
+  // Handle pending confirmations
+  const lower = msg.text.toLowerCase().trim();
+  if ((lower === 'yes' || lower === 'no') && pendingCreations[msg.chat.id]) {
+    const pending = pendingCreations[msg.chat.id];
+    if (pending.type === 'create') {
+      if (lower === 'yes') {
+        const created = [];
+        for (const e of pending.events) {
+          try {
+            await createEvent({
+              title: e.title,
+              location: e.location,
+              start: e.start.toISOString(),
+              end: e.end.toISOString(),
+              createdBy: `@${msg.from.username || msg.from.id}`
+            });
+            created.push(e);
+            logger.info({ requestId, title: e.title, start: e.start.format('HH:mm'), end: e.end.format('HH:mm') }, 'Event created after confirmation');
+          } catch (err) {
+            logger.error({ requestId, err: err.message }, 'Event creation failed after confirmation');
+          }
+        }
+        if (created.length > 0) {
+          let reply = `✅ Created ${created.length} event(s) after confirmation\n\n`;
+          created.forEach((e, i) => {
+            reply += `${i + 1}️⃣ ${e.title}\n🕒 ${e.start.format('HH:mm')}–${e.end.format('HH:mm')}\n\n`;
+          });
+          await bot.sendMessage(msg.chat.id, reply.trim());
+        }
+      } else {
+        await bot.sendMessage(msg.chat.id, '❌ Event creation cancelled.');
+        logger.info({ requestId }, 'Event creation cancelled by user');
+      }
+    }
+    delete pendingCreations[msg.chat.id];
+    return;
+  }
 
   // Log incoming message
   const text = msg.text.length > 100 ? msg.text.substring(0, 100) + '...' : msg.text;
@@ -94,19 +135,41 @@ bot.on('message', async (msg) => {
     return;
   }
 
-  let reply = `✅ Created ${results.length} event(s)\n\n`;
-
-  results.forEach((e, i) => {
-    reply +=
-      `${i + 1}️⃣ ${e.title}\n` +
-      `🕒 ${e.start.format('HH:mm')}–${e.end.format('HH:mm')}\n\n`;
-  });
-
-  if (failed) {
-    reply += `⚠️ Skipped ${failed} invalid line(s)`;
+  // Check for conflicts
+  let allConflicts = [];
+  let hasConflict = false;
+  for (const e of results) {
+    const day = e.start.startOf('day');
+    const conflicts = await checkConflicts(day, e.start.hour(), e.end.hour());
+    if (conflicts.length > 0) {
+      hasConflict = true;
+      allConflicts.push(...conflicts);
+    }
   }
 
-  await bot.sendMessage(msg.chat.id, reply.trim());
+  if (hasConflict) {
+    const uniqueConflicts = [...new Set(allConflicts.map(JSON.stringify))].map(JSON.parse); // unique by stringify
+    pendingCreations[msg.chat.id] = { type: 'create', events: results, conflicts: uniqueConflicts };
+    let reply = `⚠️ Conflict detected with existing events:\n\n`;
+    uniqueConflicts.forEach((event, i) => {
+      const title = event.summary || '(Untitled)';
+      const start = dayjs(event.start.dateTime).format('HH:mm');
+      const end = dayjs(event.end.dateTime).format('HH:mm');
+      reply += `${i + 1}️⃣ ${title}\n🕒 ${start}–${end}\n\n`;
+    });
+    reply += `Create anyway? (yes/no)`;
+    await bot.sendMessage(msg.chat.id, reply.trim());
+    logger.info({ requestId, conflictCount: uniqueConflicts.length }, 'Conflict detected, awaiting confirmation');
+  } else {
+    let reply = `✅ Created ${results.length} event(s)\n\n`;
+    results.forEach((e, i) => {
+      reply += `${i + 1}️⃣ ${e.title}\n🕒 ${e.start.format('HH:mm')}–${e.end.format('HH:mm')}\n\n`;
+    });
+    if (failed) {
+      reply += `⚠️ Skipped ${failed} invalid line(s)`;
+    }
+    await bot.sendMessage(msg.chat.id, reply.trim());
+  }
 });
 
 bot.onText(/^\/clear(?:\s+(.+))?$/, async (msg, match) => {

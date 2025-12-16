@@ -1,4 +1,5 @@
 const { google } = require('googleapis');
+const dayjs = require('dayjs');
 const { SERVICE_ACCOUNT_JSON, CALENDAR_ID, TIMEZONE } = require('./config');
 
 const credentials = JSON.parse(
@@ -78,4 +79,16 @@ async function deleteEventsByDay(date) {
   return deletedEvents;
 }
 
-module.exports = { createEvent, deleteEventsByDay, listEventsByDay };
+async function checkConflicts(date, start, end) {
+  const events = await listEventsByDay(date);
+  const startTime = date.hour(start).minute(0);
+  const endTime = date.hour(end).minute(0);
+
+  return events.filter(event => {
+    const eStart = dayjs(event.start.dateTime);
+    const eEnd = dayjs(event.end.dateTime);
+    return eStart.isBefore(endTime) && eEnd.isAfter(startTime);
+  });
+}
+
+module.exports = { createEvent, deleteEventsByDay, listEventsByDay, checkConflicts };
