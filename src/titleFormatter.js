@@ -62,11 +62,7 @@ function formatEventTitle({ rawTitle }) {
   const cleanTitle = capitalize(rawTitle);
   const category = detectCategory(cleanTitle);
 
-  return {
-    summary: `${category.emoji} ${cleanTitle}`,
-    display: `${category.emoji} ${cleanTitle}`,
-    visibility: category.name === 'Private' ? 'private' : 'default'
-  };
+  return `${category.emoji} ${category.name} · ${cleanTitle}`;
 }
 
 
