@@ -36,7 +36,9 @@ bot.on('message', async (msg) => {
               location: e.location,
               start: e.start.toISOString(),
               end: e.end.toISOString(),
-              createdBy: `@${msg.from.username || msg.from.id}`
+              createdBy: `@${msg.from.username || msg.from.id}`,
+              chatId: msg.chat.id,
+              messageId: msg.message_id
             });
             created.push(e);
             logger.info({ requestId, title: e.title, start: e.start.format('HH:mm'), end: e.end.format('HH:mm') }, 'Event created after confirmation');
@@ -109,7 +111,9 @@ bot.on('message', async (msg) => {
         location: parsed.location,
         start: start.toISOString(),
         end: end.toISOString(),
-        createdBy: `@${msg.from.username || msg.from.id}`
+        createdBy: `@${msg.from.username || msg.from.id}`,
+        chatId: msg.chat.id,
+        messageId: msg.message_id
       });
 
       logger.info({ requestId, title, start: start.format('HH:mm'), end: end.format('HH:mm') }, 'Event created');
@@ -291,7 +295,9 @@ bot.onText(/^\/undo$/, async (msg) => {
         location: event.location || '',
         start: event.start,
         end: event.end,
-        createdBy: 'Restored by /undo'
+        createdBy: 'Restored by /undo',
+        chatId: msg.chat.id,
+        messageId: msg.message_id
       });
       results.push(event);
     }

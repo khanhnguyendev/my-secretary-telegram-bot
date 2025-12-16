@@ -26,10 +26,10 @@ async function listEventsByDay(date) {
   });
 
   const events = response.data.items || [];
-  return events.filter(event => event.description && event.description.startsWith('Created by')).slice(0, 20);
+  return events.filter(event => event.description && event.description.includes('[bot=ryan-mimi]')).slice(0, 20);
 }
 
-async function createEvent({ title, location, start, end, createdBy }) {
+async function createEvent({ title, location, start, end, createdBy, chatId, messageId }) {
   return calendar.events.insert({
     calendarId: CALENDAR_ID,
     requestBody: {
@@ -37,7 +37,7 @@ async function createEvent({ title, location, start, end, createdBy }) {
       location,
       start: { dateTime: start, timeZone: TIMEZONE },
       end: { dateTime: end, timeZone: TIMEZONE },
-      description: `Created by ${createdBy}`
+      description: `Created by ${createdBy}\n[bot=ryan-mimi]\n[source=telegram]\n[chatId=${chatId}]\n[messageId=${messageId}]`
     }
   });
 }
