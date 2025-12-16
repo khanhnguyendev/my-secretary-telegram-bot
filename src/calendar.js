@@ -30,16 +30,37 @@ async function listEventsByDay(date) {
 }
 
 async function createEvent({ title, location, start, end, createdBy, chatId, messageId }) {
-  return calendar.events.insert({
-    calendarId: CALENDAR_ID,
-    requestBody: {
-      summary: title,
-      location,
-      start: { dateTime: start, timeZone: TIMEZONE },
-      end: { dateTime: end, timeZone: TIMEZONE },
-      description: `Created by ${createdBy}\n[bot=ryan-mimi]\n[source=telegram]\n[chatId=${chatId}]\n[messageId=${messageId}]`
+  const requestBody = {
+    summary: title,
+    location,
+    start: { dateTime: start, timeZone: TIMEZONE },
+    end: { dateTime: end, timeZone: TIMEZONE },
+    description: `Created by ${createdBy}\n[bot=ryan-mimi]\n[source=telegram]\n[chatId=${chatId}]\n[messageId=${messageId}]`
+  };
+
+  let retried = false;
+  let attempts = 0;
+  const maxAttempts = 3;
+
+  while (attempts < maxAttempts) {
+    try {
+      await calendar.events.insert({
+        calendarId: CALENDAR_ID,
+        requestBody
+      });
+      return { success: true, retried };
+    } catch (err) {
+      if (err.code === 409 && attempts < maxAttempts - 1) {
+        retried = true;
+        attempts++;
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.pow(2, attempts - 1) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw err;
     }
-  });
+  }
 }
 
 async function deleteEventsByDay(date) {

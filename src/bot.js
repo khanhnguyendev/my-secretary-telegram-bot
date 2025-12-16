@@ -84,7 +84,7 @@ bot.on('message', async (msg) => {
     .map(l => l.trim())
     .filter(Boolean);
 
-  const results = [];
+  const parsedEvents = [];
   let failed = 0;
 
   for (const line of lines) {
@@ -96,42 +96,26 @@ bot.on('message', async (msg) => {
       continue;
     }
 
-    try {
-      const date = resolveDate(parsed.date);
+    const date = resolveDate(parsed.date);
 
-      const start = date.hour(parsed.start).minute(0).second(0);
-      const end = date.hour(parsed.end).minute(0).second(0);
+    const start = date.hour(parsed.start).minute(0).second(0);
+    const end = date.hour(parsed.end).minute(0).second(0);
 
-      const title = formatEventTitle({
-        rawTitle: parsed.title
-      });
+    const title = formatEventTitle({
+      rawTitle: parsed.title
+    });
 
-      await createEvent({
-        title,
-        location: parsed.location,
-        start: start.toISOString(),
-        end: end.toISOString(),
-        createdBy: `@${msg.from.username || msg.from.id}`,
-        chatId: msg.chat.id,
-        messageId: msg.message_id
-      });
-
-      logger.info({ requestId, title, start: start.format('HH:mm'), end: end.format('HH:mm') }, 'Event created');
-
-      results.push({
-        title,
-        start,
-        end
-      });
-    } catch (err) {
-      logger.error({ requestId, err: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined }, 'Event creation failed');
-      failed++;
-    }
+    parsedEvents.push({
+      title,
+      location: parsed.location,
+      start,
+      end
+    });
   }
 
-  logger.info({ requestId, parsedCount: results.length, failedCount: failed }, 'Event parsing completed');
+  logger.info({ requestId, parsedCount: parsedEvents.length, failedCount: failed }, 'Event parsing completed');
 
-  if (!results.length) {
+  if (!parsedEvents.length) {
     await bot.sendMessage(
       msg.chat.id,
       '❌ No valid events were created. Please check the format.\nExample:\n16-18: badminton'
@@ -139,10 +123,10 @@ bot.on('message', async (msg) => {
     return;
   }
 
-  // Check for conflicts
+  // Check for conflicts before creating
   let allConflicts = [];
   let hasConflict = false;
-  for (const e of results) {
+  for (const e of parsedEvents) {
     const day = e.start.startOf('day');
     const conflicts = await checkConflicts(day, e.start.hour(), e.end.hour());
     if (conflicts.length > 0) {
@@ -153,7 +137,7 @@ bot.on('message', async (msg) => {
 
   if (hasConflict) {
     const uniqueConflicts = [...new Set(allConflicts.map(JSON.stringify))].map(JSON.parse); // unique by stringify
-    pendingCreations[msg.chat.id] = { type: 'create', events: results, conflicts: uniqueConflicts };
+    pendingCreations[msg.chat.id] = { type: 'create', events: parsedEvents, conflicts: uniqueConflicts };
     let reply = `⚠️ Conflict detected with existing events:\n\n`;
     uniqueConflicts.forEach((event, i) => {
       const title = event.summary || '(Untitled)';
@@ -165,6 +149,33 @@ bot.on('message', async (msg) => {
     await bot.sendMessage(msg.chat.id, reply.trim());
     logger.info({ requestId, conflictCount: uniqueConflicts.length }, 'Conflict detected, awaiting confirmation');
   } else {
+    // Create all events
+    const results = [];
+    for (const e of parsedEvents) {
+      try {
+        const result = await createEvent({
+          title: e.title,
+          location: e.location,
+          start: e.start.toISOString(),
+          end: e.end.toISOString(),
+          createdBy: `@${msg.from.username || msg.from.id}`,
+          chatId: msg.chat.id,
+          messageId: msg.message_id
+        });
+
+        if (result.retried) {
+          await bot.sendMessage(msg.chat.id, '⚠️ Conflict detected. Retrying…');
+        }
+
+        logger.info({ requestId, title: e.title, start: e.start.format('HH:mm'), end: e.end.format('HH:mm') }, 'Event created');
+
+        results.push(e);
+      } catch (err) {
+        logger.error({ requestId, err: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined }, 'Event creation failed');
+        failed++;
+      }
+    }
+
     let reply = `✅ Created ${results.length} event(s)\n\n`;
     results.forEach((e, i) => {
       reply += `${i + 1}️⃣ ${e.title}\n🕒 ${e.start.format('HH:mm')}–${e.end.format('HH:mm')}\n\n`;
