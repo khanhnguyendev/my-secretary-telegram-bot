@@ -1,5 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const dayjs = require('dayjs');
+const crypto = require('crypto');
+const logger = require('./logger');
 
 const { BOT_TOKEN, ALLOWED_USERS } = require('./config');
 const { parseInput } = require('./parser');
@@ -13,13 +15,23 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 let undoBuffer = null;
 
 bot.on('message', async (msg) => {
+  const requestId = crypto.randomUUID();
+
   if (!msg.text) return;
+
+  // Log incoming message
+  const text = msg.text.length > 100 ? msg.text.substring(0, 100) + '...' : msg.text;
+  logger.info({ requestId, chatId: msg.chat.id, userId: msg.from.id, text }, 'Incoming message');
 
   // Permission check
   if (!ALLOWED_USERS.includes(msg.from.id)) {
+    logger.warn({ requestId, chatId: msg.chat.id, userId: msg.from.id }, 'Unauthorized access attempt');
     await bot.sendMessage(msg.chat.id, '❌ You are not allowed to use this bot.');
     return;
   }
+
+  // Skip event creation for /clear and /undo commands
+  if (msg.text.startsWith('/clear') || msg.text.startsWith('/undo')) return;
 
   // Skip event creation for /clear and /undo commands
   if (msg.text.startsWith('/clear') || msg.text.startsWith('/undo')) return;
@@ -36,6 +48,7 @@ bot.on('message', async (msg) => {
     const parsed = parseInput(line);
 
     if (!parsed) {
+      logger.warn({ requestId, line: line.length > 50 ? line.substring(0,50) + '...' : line }, 'Failed to parse line');
       failed++;
       continue;
     }
@@ -58,16 +71,20 @@ bot.on('message', async (msg) => {
         createdBy: `@${msg.from.username || msg.from.id}`
       });
 
+      logger.info({ requestId, title, start: start.format('HH:mm'), end: end.format('HH:mm') }, 'Event created');
+
       results.push({
         title,
         start,
         end
       });
     } catch (err) {
-      console.error('Create event failed:', err.message);
+      logger.error({ requestId, err: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined }, 'Event creation failed');
       failed++;
     }
   }
+
+  logger.info({ requestId, parsedCount: results.length, failedCount: failed }, 'Event parsing completed');
 
   if (!results.length) {
     await bot.sendMessage(
@@ -93,10 +110,15 @@ bot.on('message', async (msg) => {
 });
 
 bot.onText(/^\/clear(?:\s+(.+))?$/, async (msg, match) => {
+  const requestId = crypto.randomUUID();
+
   if (!ALLOWED_USERS.includes(msg.from.id)) {
+    logger.warn({ requestId, chatId: msg.chat.id, userId: msg.from.id }, 'Unauthorized /clear attempt');
     await bot.sendMessage(msg.chat.id, '❌ You are not allowed to use this bot.');
     return;
   }
+
+  logger.info({ requestId, chatId: msg.chat.id, userId: msg.from.id, arg: match[1] }, 'Clear command received');
 
   const arg = match[1]?.trim();
   let date;
@@ -118,6 +140,8 @@ bot.onText(/^\/clear(?:\s+(.+))?$/, async (msg, match) => {
     const deletedEvents = await deleteEventsByDay(date);
     undoBuffer = deletedEvents;
 
+    logger.info({ requestId, date: date.format('YYYY-MM-DD'), deletedCount: deletedEvents.length }, 'Events deleted');
+
     if (deletedEvents.length === 0) {
       await bot.sendMessage(msg.chat.id, `ℹ️ No events found on ${date.format('YYYY-MM-DD')}`);
       return;
@@ -133,18 +157,24 @@ bot.onText(/^\/clear(?:\s+(.+))?$/, async (msg, match) => {
 
     await bot.sendMessage(msg.chat.id, reply.trim());
   } catch (err) {
-    console.error('Delete events failed:', err.message);
+    logger.error({ requestId, err: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined }, 'Clear command failed');
     await bot.sendMessage(msg.chat.id, '❌ Failed to delete events.');
   }
 });
 
 bot.onText(/^\/undo$/, async (msg) => {
+  const requestId = crypto.randomUUID();
+
   if (!ALLOWED_USERS.includes(msg.from.id)) {
+    logger.warn({ requestId, chatId: msg.chat.id, userId: msg.from.id }, 'Unauthorized /undo attempt');
     await bot.sendMessage(msg.chat.id, '❌ You are not allowed to use this bot.');
     return;
   }
 
+  logger.info({ requestId, chatId: msg.chat.id, userId: msg.from.id }, 'Undo command received');
+
   if (!undoBuffer || undoBuffer.length === 0) {
+    logger.info({ requestId }, 'Nothing to undo');
     await bot.sendMessage(msg.chat.id, '❌ Nothing to undo.');
     return;
   }
@@ -164,6 +194,8 @@ bot.onText(/^\/undo$/, async (msg) => {
 
     undoBuffer = null; // Clear the undo buffer after successful restore
 
+    logger.info({ requestId, restoredCount: results.length }, 'Events restored');
+
     let reply = `✅ Restored ${results.length} event(s)\n\n`;
 
     results.forEach((e, i) => {
@@ -174,7 +206,7 @@ bot.onText(/^\/undo$/, async (msg) => {
 
     await bot.sendMessage(msg.chat.id, reply.trim());
   } catch (err) {
-    console.error('Undo failed:', err.message);
+    logger.error({ requestId, err: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined }, 'Undo command failed');
     await bot.sendMessage(msg.chat.id, '❌ Failed to restore events.');
   }
 });
