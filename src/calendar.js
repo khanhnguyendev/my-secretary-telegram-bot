@@ -51,7 +51,8 @@ async function deleteEventsByDay(date) {
     deletedEvents.push({
       title: event.summary,
       start: event.start.dateTime,
-      end: event.end.dateTime
+      end: event.end.dateTime,
+      location: event.location || ''
     });
   }
 

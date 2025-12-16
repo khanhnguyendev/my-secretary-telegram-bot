@@ -9,6 +9,9 @@ const { formatEventTitle } = require('./titleFormatter');
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
+// In-memory undo buffer for the most recent /clear operation
+let undoBuffer = null;
+
 bot.on('message', async (msg) => {
   if (!msg.text) return;
 
@@ -18,8 +21,8 @@ bot.on('message', async (msg) => {
     return;
   }
 
-  // Skip event creation for /clear commands
-  if (msg.text.startsWith('/clear')) return;
+  // Skip event creation for /clear and /undo commands
+  if (msg.text.startsWith('/clear') || msg.text.startsWith('/undo')) return;
 
   const lines = msg.text
     .split('\n')
@@ -113,6 +116,7 @@ bot.onText(/^\/clear(?:\s+(.+))?$/, async (msg, match) => {
 
   try {
     const deletedEvents = await deleteEventsByDay(date);
+    undoBuffer = deletedEvents;
 
     if (deletedEvents.length === 0) {
       await bot.sendMessage(msg.chat.id, `ℹ️ No events found on ${date.format('YYYY-MM-DD')}`);
@@ -131,6 +135,47 @@ bot.onText(/^\/clear(?:\s+(.+))?$/, async (msg, match) => {
   } catch (err) {
     console.error('Delete events failed:', err.message);
     await bot.sendMessage(msg.chat.id, '❌ Failed to delete events.');
+  }
+});
+
+bot.onText(/^\/undo$/, async (msg) => {
+  if (!ALLOWED_USERS.includes(msg.from.id)) {
+    await bot.sendMessage(msg.chat.id, '❌ You are not allowed to use this bot.');
+    return;
+  }
+
+  if (!undoBuffer || undoBuffer.length === 0) {
+    await bot.sendMessage(msg.chat.id, '❌ Nothing to undo.');
+    return;
+  }
+
+  try {
+    const results = [];
+    for (const event of undoBuffer) {
+      await createEvent({
+        title: event.title,
+        location: event.location || '',
+        start: event.start,
+        end: event.end,
+        createdBy: 'Restored by /undo'
+      });
+      results.push(event);
+    }
+
+    undoBuffer = null; // Clear the undo buffer after successful restore
+
+    let reply = `✅ Restored ${results.length} event(s)\n\n`;
+
+    results.forEach((e, i) => {
+      const start = dayjs(e.start).format('HH:mm');
+      const end = dayjs(e.end).format('HH:mm');
+      reply += `${i + 1}️⃣ ${e.title}\n🕒 ${start}–${end}\n\n`;
+    });
+
+    await bot.sendMessage(msg.chat.id, reply.trim());
+  } catch (err) {
+    console.error('Undo failed:', err.message);
+    await bot.sendMessage(msg.chat.id, '❌ Failed to restore events.');
   }
 });
 
