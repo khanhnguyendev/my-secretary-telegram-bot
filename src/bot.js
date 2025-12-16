@@ -12,41 +12,78 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 bot.on('message', async (msg) => {
   if (!msg.text) return;
 
+  // Permission check
   if (!ALLOWED_USERS.includes(msg.from.id)) {
     await bot.sendMessage(msg.chat.id, '❌ You are not allowed to use this bot.');
     return;
   }
 
-  const parsed = parseInput(msg.text);
-  if (!parsed) {
+  const lines = msg.text
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const results = [];
+  let failed = 0;
+
+  for (const line of lines) {
+    const parsed = parseInput(line);
+
+    if (!parsed) {
+      failed++;
+      continue;
+    }
+
+    try {
+      const date = resolveDate(parsed.date);
+
+      const start = date.hour(parsed.start).minute(0).second(0);
+      const end = date.hour(parsed.end).minute(0).second(0);
+
+      const title = formatEventTitle({
+        rawTitle: parsed.title
+      });
+
+      await createEvent({
+        title,
+        location: parsed.location,
+        start: start.toISOString(),
+        end: end.toISOString(),
+        createdBy: `@${msg.from.username || msg.from.id}`
+      });
+
+      results.push({
+        title,
+        start,
+        end
+      });
+    } catch (err) {
+      console.error('Create event failed:', err.message);
+      failed++;
+    }
+  }
+
+  if (!results.length) {
     await bot.sendMessage(
       msg.chat.id,
-      '❌ Invalid format. Example: 16-18h: badminton'
+      '❌ No valid events were created. Please check the format.\nExample:\n16-18: badminton'
     );
     return;
   }
 
-  const date = resolveDate(parsed.date);
-  const start = date.hour(parsed.start).minute(0);
-  const end = date.hour(parsed.end).minute(0);
+  let reply = `✅ Created ${results.length} event(s)\n\n`;
 
-  const formatted = formatEventTitle({
-    rawTitle: parsed.title
+  results.forEach((e, i) => {
+    reply +=
+      `${i + 1}️⃣ ${e.title}\n` +
+      `🕒 ${e.start.format('HH:mm')}–${e.end.format('HH:mm')}\n\n`;
   });
 
-  await createEvent({
-    title: formatted.summary,
-    location: parsed.location,
-    start: start.toISOString(),
-    end: end.toISOString(),
-    visibility: formatted.visibility,
-    createdBy: `@${msg.from.username || msg.from.id}`
-  });
+  if (failed) {
+    reply += `⚠️ Skipped ${failed} invalid line(s)`;
+  }
 
-  bot.sendMessage(
-    msg.chat.id,
-    `✅ Event created\n🕒 ${start.format('HH:mm')}–${end.format('HH:mm')}\n📌 ${formatted.display}`
-  );
+  await bot.sendMessage(msg.chat.id, reply.trim());
 });
 
 module.exports = bot;
