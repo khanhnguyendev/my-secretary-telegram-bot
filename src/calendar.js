@@ -12,6 +12,22 @@ const auth = new google.auth.GoogleAuth({
 
 const calendar = google.calendar({ version: 'v3', auth });
 
+async function listEventsByDay(date) {
+  const startOfDay = date.startOf('day').toISOString();
+  const endOfDay = date.endOf('day').toISOString();
+
+  const response = await calendar.events.list({
+    calendarId: CALENDAR_ID,
+    timeMin: startOfDay,
+    timeMax: endOfDay,
+    singleEvents: true,
+    orderBy: 'startTime'
+  });
+
+  const events = response.data.items || [];
+  return events.filter(event => event.description && event.description.startsWith('Created by')).slice(0, 20);
+}
+
 async function createEvent({ title, location, start, end, createdBy }) {
   return calendar.events.insert({
     calendarId: CALENDAR_ID,
@@ -40,9 +56,12 @@ async function deleteEventsByDay(date) {
 
   const events = response.data.items || [];
 
+  // Filter events created by this bot and limit to 20
+  const botEvents = events.filter(event => event.description && event.description.startsWith('Created by')).slice(0, 20);
+
   const deletedEvents = [];
 
-  for (const event of events) {
+  for (const event of botEvents) {
     await calendar.events.delete({
       calendarId: CALENDAR_ID,
       eventId: event.id
@@ -59,4 +78,4 @@ async function deleteEventsByDay(date) {
   return deletedEvents;
 }
 
-module.exports = { createEvent, deleteEventsByDay };
+module.exports = { createEvent, deleteEventsByDay, listEventsByDay };

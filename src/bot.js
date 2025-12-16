@@ -6,7 +6,7 @@ const logger = require('./logger');
 const { BOT_TOKEN, ALLOWED_USERS } = require('./config');
 const { parseInput } = require('./parser');
 const { resolveDate } = require('./dateResolver');
-const { createEvent, deleteEventsByDay } = require('./calendar');
+const { createEvent, deleteEventsByDay, listEventsByDay } = require('./calendar');
 const { formatEventTitle } = require('./titleFormatter');
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
@@ -120,7 +120,14 @@ bot.onText(/^\/clear(?:\s+(.+))?$/, async (msg, match) => {
 
   logger.info({ requestId, chatId: msg.chat.id, userId: msg.from.id, arg: match[1] }, 'Clear command received');
 
-  const arg = match[1]?.trim();
+  let arg = match[1]?.trim();
+  let confirm = false;
+
+  if (arg && arg.endsWith(' confirm')) {
+    confirm = true;
+    arg = arg.slice(0, -8).trim();
+  }
+
   let date;
 
   if (!arg || arg === 'today') {
@@ -136,29 +143,63 @@ bot.onText(/^\/clear(?:\s+(.+))?$/, async (msg, match) => {
     date = parsed;
   }
 
-  try {
-    const deletedEvents = await deleteEventsByDay(date);
-    undoBuffer = deletedEvents;
+  if (!confirm) {
+    try {
+      const events = await listEventsByDay(date);
+      const count = events.length;
+      if (count === 0) {
+        await bot.sendMessage(msg.chat.id, `ℹ️ No events found on ${date.format('YYYY-MM-DD')}`);
+        logger.info({ requestId, date: date.format('YYYY-MM-DD'), eventCount: 0 }, 'No events to clear');
+        return;
+      }
 
-    logger.info({ requestId, date: date.format('YYYY-MM-DD'), deletedCount: deletedEvents.length }, 'Events deleted');
+      let reply = `⚠️ This will delete ${count} event(s) on ${date.format('YYYY-MM-DD')}\n\n`;
 
-    if (deletedEvents.length === 0) {
-      await bot.sendMessage(msg.chat.id, `ℹ️ No events found on ${date.format('YYYY-MM-DD')}`);
-      return;
+      const displayCount = Math.min(count, 10);
+      events.slice(0, displayCount).forEach((event, i) => {
+        const title = event.summary || '(Untitled)';
+        const start = dayjs(event.start.dateTime).format('HH:mm');
+        const end = dayjs(event.end.dateTime).format('HH:mm');
+        reply += `${i + 1}️⃣ ${title}\n🕒 ${start}–${end}\n\n`;
+      });
+
+      if (count > 10) {
+        reply += `...and ${count - 10} more\n\n`;
+      }
+
+      reply += `Type \`/clear ${arg || 'today'} confirm\` to proceed.`;
+
+      await bot.sendMessage(msg.chat.id, reply.trim());
+      logger.info({ requestId, date: date.format('YYYY-MM-DD'), eventCount: count }, 'Clear confirmation requested');
+    } catch (err) {
+      logger.error({ requestId, err: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined }, 'List events failed');
+      await bot.sendMessage(msg.chat.id, '❌ Failed to check events.');
     }
+  } else {
+    try {
+      const deletedEvents = await deleteEventsByDay(date);
+      undoBuffer = deletedEvents;
 
-    let reply = `🗑️ Deleted ${deletedEvents.length} event(s)\n📅 ${date.format('YYYY-MM-DD')}\n\n`;
+      logger.info({ requestId, date: date.format('YYYY-MM-DD'), deletedCount: deletedEvents.length }, 'Events deleted');
 
-    deletedEvents.forEach((event, i) => {
-      const start = dayjs(event.start).format('HH:mm');
-      const end = dayjs(event.end).format('HH:mm');
-      reply += `${i + 1}️⃣ ${event.title}\n🕒 ${start}–${end}\n\n`;
-    });
+      if (deletedEvents.length === 0) {
+        await bot.sendMessage(msg.chat.id, `ℹ️ No events found on ${date.format('YYYY-MM-DD')}`);
+        return;
+      }
 
-    await bot.sendMessage(msg.chat.id, reply.trim());
-  } catch (err) {
-    logger.error({ requestId, err: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined }, 'Clear command failed');
-    await bot.sendMessage(msg.chat.id, '❌ Failed to delete events.');
+      let reply = `🗑️ Deleted ${deletedEvents.length} event(s)\n📅 ${date.format('YYYY-MM-DD')}\n\n`;
+
+      deletedEvents.forEach((event, i) => {
+        const start = dayjs(event.start).format('HH:mm');
+        const end = dayjs(event.end).format('HH:mm');
+        reply += `${i + 1}️⃣ ${event.title}\n🕒 ${start}–${end}\n\n`;
+      });
+
+      await bot.sendMessage(msg.chat.id, reply.trim());
+    } catch (err) {
+      logger.error({ requestId, err: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined }, 'Clear command failed');
+      await bot.sendMessage(msg.chat.id, '❌ Failed to delete events.');
+    }
   }
 });
 
