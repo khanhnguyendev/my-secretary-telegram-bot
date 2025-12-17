@@ -1,9 +1,14 @@
 const TelegramBot = require('node-telegram-bot-api');
 const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
 const crypto = require('crypto');
 const logger = require('./logger');
 
-const { BOT_TOKEN, ALLOWED_USERS } = require('./config');
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const { BOT_TOKEN, ALLOWED_USERS, TIMEZONE } = require('./config');
 const { parseInput } = require('./parser');
 const { resolveDate } = require('./dateResolver');
 const { createEvent, deleteEventsByDay, listEventsByDay, checkConflicts } = require('./calendar');
@@ -141,8 +146,8 @@ bot.on('message', async (msg) => {
     let reply = `⚠️ Conflict detected with existing events:\n\n`;
     uniqueConflicts.forEach((event, i) => {
       const title = event.summary || '(Untitled)';
-      const start = dayjs(event.start.dateTime).format('HH:mm');
-      const end = dayjs(event.end.dateTime).format('HH:mm');
+      const start = dayjs(event.start.dateTime).tz(TIMEZONE).format('HH:mm');
+      const end = dayjs(event.end.dateTime).tz(TIMEZONE).format('HH:mm');
       reply += `${i + 1}️⃣ ${title}\n🕒 ${start}–${end}\n\n`;
     });
     reply += `Create anyway? (yes/no)`;
@@ -209,16 +214,16 @@ bot.onText(/^\/clear(?:\s+(.+))?$/, async (msg, match) => {
   let date;
 
   if (!arg || arg === 'today') {
-    date = dayjs();
+    date = dayjs().tz(TIMEZONE);
   } else if (arg === 'tomorrow') {
-    date = dayjs().add(1, 'day');
+    date = dayjs().tz(TIMEZONE).add(1, 'day');
   } else {
     const parsed = dayjs(arg);
     if (!parsed.isValid()) {
       await bot.sendMessage(msg.chat.id, '❌ Invalid date format. Use /clear, /clear today, /clear tomorrow, or /clear YYYY-MM-DD');
       return;
     }
-    date = parsed;
+    date = parsed.tz(TIMEZONE);
   }
 
   if (!confirm) {
@@ -236,8 +241,8 @@ bot.onText(/^\/clear(?:\s+(.+))?$/, async (msg, match) => {
       const displayCount = Math.min(count, 10);
       events.slice(0, displayCount).forEach((event, i) => {
         const title = event.summary || '(Untitled)';
-        const start = dayjs(event.start.dateTime).format('HH:mm');
-        const end = dayjs(event.end.dateTime).format('HH:mm');
+        const start = dayjs(event.start.dateTime).tz(TIMEZONE).format('HH:mm');
+        const end = dayjs(event.end.dateTime).tz(TIMEZONE).format('HH:mm');
         reply += `${i + 1}️⃣ ${title}\n🕒 ${start}–${end}\n\n`;
       });
 
@@ -320,8 +325,8 @@ bot.onText(/^\/undo$/, async (msg) => {
     let reply = `✅ Restored ${results.length} event(s)\n\n`;
 
     results.forEach((e, i) => {
-      const start = dayjs(e.start).format('HH:mm');
-      const end = dayjs(e.end).format('HH:mm');
+      const start = dayjs(e.start).tz(TIMEZONE).format('HH:mm');
+      const end = dayjs(e.end).tz(TIMEZONE).format('HH:mm');
       reply += `${i + 1}️⃣ ${e.title}\n🕒 ${start}–${end}\n\n`;
     });
 

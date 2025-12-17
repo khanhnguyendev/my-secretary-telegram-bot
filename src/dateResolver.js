@@ -1,7 +1,13 @@
 const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+const { TIMEZONE } = require('./config');
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 function resolveDate(dateToken) {
-  let base = dayjs();
+  let base = dayjs().tz(TIMEZONE);
 
   if (dateToken === 'mai') base = base.add(1, 'day');
 

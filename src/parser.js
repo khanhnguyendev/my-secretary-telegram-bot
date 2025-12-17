@@ -25,8 +25,8 @@ function parseInput(text) {
   const main = parts[0].trim();
   const location = parts[1]?.trim();
 
-  // Find time range: \d+(: \d+)? - \d+(: \d+)?
-  const timeMatch = main.match(/(\d+(?::\d+)?)-(\d+(?::\d+)?)/);
+  // Find time range: \d+(: \d+)?(?:am|pm)? - \d+(: \d+)?(?:am|pm)?
+  const timeMatch = main.match(/(\d+(?::\d+)?(?:am|pm)?)-(\d+(?::\d+)?(?:am|pm)?)/i);
   if (!timeMatch) return null;
 
   const startStr = timeMatch[1];
@@ -37,7 +37,11 @@ function parseInput(text) {
 
   // Parse start and end hours (ignore minutes for now, as bot sets minute(0))
   const parseHour = (str) => {
-    return Number(str.split(':')[0]);
+    str = str.toLowerCase();
+    let hour = Number(str.replace(/[^\d]/g, ''));
+    if (str.includes('pm') && hour !== 12) hour += 12;
+    if (str.includes('am') && hour === 12) hour = 0;
+    return hour;
   };
 
   const start = parseHour(startStr);

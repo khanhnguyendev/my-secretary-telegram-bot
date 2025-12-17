@@ -1,6 +1,11 @@
 const { google } = require('googleapis');
 const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
 const { SERVICE_ACCOUNT_JSON, CALENDAR_ID, TIMEZONE } = require('./config');
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const credentials = JSON.parse(
   Buffer.from(SERVICE_ACCOUNT_JSON, 'base64').toString()
@@ -106,8 +111,8 @@ async function checkConflicts(date, start, end) {
   const endTime = date.hour(end).minute(0);
 
   return events.filter(event => {
-    const eStart = dayjs(event.start.dateTime);
-    const eEnd = dayjs(event.end.dateTime);
+    const eStart = dayjs(event.start.dateTime).tz(TIMEZONE);
+    const eEnd = dayjs(event.end.dateTime).tz(TIMEZONE);
     return eStart.isBefore(endTime) && eEnd.isAfter(startTime);
   });
 }
