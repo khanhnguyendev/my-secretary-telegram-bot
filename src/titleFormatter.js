@@ -2,22 +2,61 @@ const CATEGORIES = [
   {
     name: 'Sport',
     emoji: '🏸',
-    keywords: ['badminton', 'gym', 'sport', 'run', 'running']
+    keywords: [
+      'badminton',
+      'gym',
+      'sport',
+      'run',
+      'running',
+      'swimming',
+      'yoga',
+      'cycling',
+      'walk'
+    ]
   },
   {
     name: 'Study',
     emoji: '📘',
-    keywords: ['english', 'study', 'learn', 'course']
+    keywords: [
+      'english',
+      'study',
+      'learn',
+      'course',
+      'reading',
+      'homework',
+      'practice',
+      'revision'
+    ]
   },
   {
     name: 'Meeting',
     emoji: '📞',
-    keywords: ['meeting', 'call', 'sync', 'discussion']
+    keywords: [
+      'meeting',
+      'call',
+      'sync',
+      'discussion',
+      'zoom',
+      'team',
+      'conference',
+      'review'
+    ]
   },
   {
     name: 'Personal',
     emoji: '🧠',
-    keywords: ['personal', 'rest', 'family', 'relax']
+    keywords: [
+      'personal',
+      'rest',
+      'family',
+      'relax',
+      'nap',
+      'meditation',
+      'shower',
+      'eat',
+      'meal',
+      'break'
+    ]
   },
   {
     name: 'Private',
@@ -30,7 +69,50 @@ const CATEGORIES = [
       'fb',
       'pt',
       'trả bài',
-      'sinh hoạt'
+      'sinh hoạt',
+      'date',
+      'anniversary'
+    ]
+  },
+  {
+    name: 'Work',
+    emoji: '💼',
+    keywords: [
+      'project',
+      'task',
+      'work',
+      'deadline',
+      'coding',
+      'development',
+      'review',
+      'report'
+    ]
+  },
+  {
+    name: 'Entertainment',
+    emoji: '🎮',
+    keywords: [
+      'movie',
+      'game',
+      'netflix',
+      'youtube',
+      'music',
+      'tv',
+      'entertainment',
+      'hobby'
+    ]
+  },
+  {
+    name: 'Travel',
+    emoji: '✈️',
+    keywords: [
+      'travel',
+      'trip',
+      'flight',
+      'holiday',
+      'tour',
+      'commute',
+      'ride'
     ]
   }
 ];
