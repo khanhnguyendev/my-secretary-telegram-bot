@@ -105,10 +105,10 @@ async function deleteEventsByDay(date) {
   return deletedEvents;
 }
 
-async function checkConflicts(date, start, end) {
+async function checkConflicts(date, startHour, startMin, endHour, endMin) {
   const events = await listEventsByDay(date);
-  const startTime = date.hour(start).minute(0);
-  const endTime = date.hour(end).minute(0);
+  const startTime = date.hour(startHour).minute(startMin);
+  const endTime = date.hour(endHour).minute(endMin);
 
   return events.filter(event => {
     const eStart = dayjs(event.start.dateTime).tz(TIMEZONE);

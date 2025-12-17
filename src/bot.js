@@ -103,8 +103,11 @@ bot.on('message', async (msg) => {
 
     const date = resolveDate(parsed.date);
 
-    const start = date.hour(parsed.start).minute(0).second(0);
-    const end = date.hour(parsed.end).minute(0).second(0);
+    const [startHour, startMin] = parsed.start_time.split(':').map(Number);
+    const [endHour, endMin] = parsed.end_time.split(':').map(Number);
+
+    const start = date.hour(startHour).minute(startMin);
+    const end = date.hour(endHour).minute(endMin);
 
     const title = formatEventTitle({
       rawTitle: parsed.title
@@ -133,7 +136,7 @@ bot.on('message', async (msg) => {
   let hasConflict = false;
   for (const e of parsedEvents) {
     const day = e.start.startOf('day');
-    const conflicts = await checkConflicts(day, e.start.hour(), e.end.hour());
+    const conflicts = await checkConflicts(day, e.start.hour(), e.start.minute(), e.end.hour(), e.end.minute());
     if (conflicts.length > 0) {
       hasConflict = true;
       allConflicts.push(...conflicts);

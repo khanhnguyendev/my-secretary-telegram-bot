@@ -59,7 +59,7 @@ const CATEGORIES = [
     ]
   },
   {
-    name: 'Private',
+    name: 'Ryan&Mimi',
     emoji: '💞',
     keywords: [
       'family time',
@@ -149,5 +149,6 @@ function formatEventTitle({ rawTitle }) {
 
 
 module.exports = {
-  formatEventTitle
+  formatEventTitle,
+  detectCategory
 };
