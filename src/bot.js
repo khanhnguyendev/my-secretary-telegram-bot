@@ -9,7 +9,7 @@ const { resolveDate } = require('./dateResolver');
 const { createEvent, deleteEventsByDay, listEventsByDay, checkConflicts } = require('./calendar');
 const { formatEventTitle } = require('./titleFormatter');
 
-const bot = new TelegramBot(BOT_TOKEN);
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
 // In-memory undo buffer for the most recent /clear operation
 let undoBuffer = null;
