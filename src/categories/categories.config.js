@@ -59,13 +59,21 @@ const CATEGORIES = [
       'personal',
       'rest',
       'family',
-      'relax',
       'nap',
       'meditation',
-      'shower',
+      'break'
+    ]
+  },
+  {
+    name: 'Meal',
+    emoji: '🍽️',
+    priority: 1,
+    keywords: [
       'eat',
       'meal',
-      'break'
+      'dinner',
+      'lunch',
+      'breakfast'
     ]
   },
   {
@@ -88,7 +96,14 @@ const CATEGORIES = [
       'trả bài',
       'sinh hoạt',
       'date',
-      'anniversary'
+      'anniversary',
+      'shower',
+      'massage',
+      'relax',
+      'chill',
+      'spa',
+      'self care',
+      'unwind'
     ]
   },
   {
