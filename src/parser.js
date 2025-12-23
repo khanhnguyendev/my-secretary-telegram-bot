@@ -78,4 +78,86 @@ function parseInput(text) {
   };
 }
 
-module.exports = { parseInput };
+// New function to parse grouped weekly schedules
+function parseGroupedInput(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const events = [];
+  let currentTitle = null;
+
+  for (const line of lines) {
+    // Check if it's a header (no bullet prefix)
+    if (!line.startsWith('-') && !line.startsWith('•') && !line.startsWith('*')) {
+      currentTitle = line;
+      continue;
+    }
+
+    // It's a bullet line
+    if (!currentTitle) {
+      console.warn(`Bullet line without header: ${line}`);
+      continue;
+    }
+
+    // Remove bullet prefix
+    let bulletContent = line.replace(/^[-•*]\s*/, '');
+
+    // Parse day and time: e.g., "T3, 21:00 - 22:00"
+    const dayTimeMatch = bulletContent.match(/^([a-zA-Z0-9]+),\s*(\d+(?::\d+)?)\s*-\s*(\d+(?::\d+)?)/);
+    if (!dayTimeMatch) {
+      console.warn(`Invalid bullet format: ${line}`);
+      continue;
+    }
+
+    const dayStr = dayTimeMatch[1].toUpperCase();
+    const startTimeStr = dayTimeMatch[2];
+    const endTimeStr = dayTimeMatch[3];
+
+    // Map Vietnamese day to weekday number (0=Sunday, 1=Monday, etc.)
+    const dayMap = {
+      'T2': 1, // Monday
+      'T3': 2, // Tuesday
+      'T4': 3, // Wednesday
+      'T5': 4, // Thursday
+      'T6': 5, // Friday
+      'T7': 6, // Saturday
+      'CN': 0  // Sunday
+    };
+
+    const weekday = dayMap[dayStr];
+    if (weekday === undefined) {
+      console.warn(`Unknown day: ${dayStr} in ${line}`);
+      continue;
+    }
+
+    // Parse times
+    const parseTime = (str) => {
+      if (str.includes(':')) {
+        const [h, m] = str.split(':').map(Number);
+        return { hour: h, minute: m };
+      } else {
+        return { hour: Number(str), minute: 0 };
+      }
+    };
+
+    const start = parseTime(startTimeStr);
+    const end = parseTime(endTimeStr);
+
+    const start_time = `${String(start.hour).padStart(2, '0')}:${String(start.minute).padStart(2, '0')}`;
+    const end_time = `${String(end.hour).padStart(2, '0')}:${String(end.minute).padStart(2, '0')}`;
+
+    const category = detectCategory(currentTitle);
+
+    events.push({
+      title: currentTitle,
+      start_time,
+      end_time,
+      category: category.name,
+      emoji: category.emoji,
+      weekday, // Add weekday for date calculation
+      date: null // Will be calculated later
+    });
+  }
+
+  return events;
+}
+
+module.exports = { parseInput, parseGroupedInput };

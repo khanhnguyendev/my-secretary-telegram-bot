@@ -9,8 +9,8 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const { BOT_TOKEN, ALLOWED_USERS, TIMEZONE } = require('./config');
-const { parseInput } = require('./parser');
-const { resolveDate } = require('./dateResolver');
+const { parseInput, parseGroupedInput } = require('./parser');
+const { resolveDate, getNextWeekday } = require('./dateResolver');
 const { createEvent, deleteEventsByDay, listEventsByDay, checkConflicts } = require('./calendar');
 const { formatEventTitle } = require('./titleFormatter');
 
@@ -54,7 +54,8 @@ bot.on('message', async (msg) => {
         if (created.length > 0) {
           let reply = `✅ Created ${created.length} event(s) after confirmation\n\n`;
           created.forEach((e, i) => {
-            reply += `${i + 1}️⃣ ${e.title}\n🕒 ${e.start.format('HH:mm')}–${e.end.format('HH:mm')}\n\n`;
+            const dateStr = e.start.format('ddd, DD/MM/YYYY');
+            reply += `${i + 1}️⃣ ${e.title}\n📅 ${dateStr}\n🕒 ${e.start.format('HH:mm')}–${e.end.format('HH:mm')}\n\n`;
           });
           await bot.sendMessage(msg.chat.id, reply.trim());
         }
@@ -89,36 +90,62 @@ bot.on('message', async (msg) => {
     .map(l => l.trim())
     .filter(Boolean);
 
-  const parsedEvents = [];
+  let parsedEvents = [];
   let failed = 0;
 
-  for (const line of lines) {
-    const parsed = parseInput(line);
+  // Check if it's a grouped schedule (has bullet points)
+  const hasBullets = lines.some(line => line.startsWith('-') || line.startsWith('•') || line.startsWith('*'));
 
-    if (!parsed) {
-      logger.warn({ requestId, line: line.length > 50 ? line.substring(0,50) + '...' : line }, 'Failed to parse line');
-      failed++;
-      continue;
+  if (hasBullets) {
+    // Use grouped parser
+    const groupedEvents = parseGroupedInput(msg.text);
+    // Calculate dates and format titles
+    for (const event of groupedEvents) {
+      event.date = getNextWeekday(event.weekday);
+      const [startHour, startMin] = event.start_time.split(':').map(Number);
+      const [endHour, endMin] = event.end_time.split(':').map(Number);
+      const start = event.date.hour(startHour).minute(startMin);
+      const end = event.date.hour(endHour).minute(endMin);
+      const title = formatEventTitle({
+        rawTitle: event.title
+      });
+      parsedEvents.push({
+        title,
+        location: '',
+        start,
+        end
+      });
     }
+  } else {
+    // Use individual line parser
+    for (const line of lines) {
+      const parsed = parseInput(line);
 
-    const date = resolveDate(parsed.date);
+      if (!parsed) {
+        logger.warn({ requestId, line: line.length > 50 ? line.substring(0,50) + '...' : line }, 'Failed to parse line');
+        failed++;
+        continue;
+      }
 
-    const [startHour, startMin] = parsed.start_time.split(':').map(Number);
-    const [endHour, endMin] = parsed.end_time.split(':').map(Number);
+      const date = resolveDate(parsed.date);
 
-    const start = date.hour(startHour).minute(startMin);
-    const end = date.hour(endHour).minute(endMin);
+      const [startHour, startMin] = parsed.start_time.split(':').map(Number);
+      const [endHour, endMin] = parsed.end_time.split(':').map(Number);
 
-    const title = formatEventTitle({
-      rawTitle: parsed.title
-    });
+      const start = date.hour(startHour).minute(startMin);
+      const end = date.hour(endHour).minute(endMin);
 
-    parsedEvents.push({
-      title,
-      location: parsed.location,
-      start,
-      end
-    });
+      const title = formatEventTitle({
+        rawTitle: parsed.title
+      });
+
+      parsedEvents.push({
+        title,
+        location: parsed.location,
+        start,
+        end
+      });
+    }
   }
 
   logger.info({ requestId, parsedCount: parsedEvents.length, failedCount: failed }, 'Event parsing completed');
@@ -149,9 +176,10 @@ bot.on('message', async (msg) => {
     let reply = `⚠️ Conflict detected with existing events:\n\n`;
     uniqueConflicts.forEach((event, i) => {
       const title = event.summary || '(Untitled)';
+      const dateStr = dayjs(event.start.dateTime).tz(TIMEZONE).format('ddd, DD/MM/YYYY');
       const start = dayjs(event.start.dateTime).tz(TIMEZONE).format('HH:mm');
       const end = dayjs(event.end.dateTime).tz(TIMEZONE).format('HH:mm');
-      reply += `${i + 1}️⃣ ${title}\n🕒 ${start}–${end}\n\n`;
+      reply += `${i + 1}️⃣ ${title}\n📅 ${dateStr}\n🕒 ${start}–${end}\n\n`;
     });
     reply += `Create anyway? (yes/no)`;
     await bot.sendMessage(msg.chat.id, reply.trim());
@@ -186,7 +214,8 @@ bot.on('message', async (msg) => {
 
     let reply = `✅ Created ${results.length} event(s)\n\n`;
     results.forEach((e, i) => {
-      reply += `${i + 1}️⃣ ${e.title}\n🕒 ${e.start.format('HH:mm')}–${e.end.format('HH:mm')}\n\n`;
+      const dateStr = e.start.format('ddd, DD/MM/YYYY');
+      reply += `${i + 1}️⃣ ${e.title}\n📅 ${dateStr}\n🕒 ${e.start.format('HH:mm')}–${e.end.format('HH:mm')}\n\n`;
     });
     if (failed) {
       reply += `⚠️ Skipped ${failed} invalid line(s)`;
@@ -328,9 +357,10 @@ bot.onText(/^\/undo$/, async (msg) => {
     let reply = `✅ Restored ${results.length} event(s)\n\n`;
 
     results.forEach((e, i) => {
+      const dateStr = dayjs(e.start).tz(TIMEZONE).format('ddd, DD/MM/YYYY');
       const start = dayjs(e.start).tz(TIMEZONE).format('HH:mm');
       const end = dayjs(e.end).tz(TIMEZONE).format('HH:mm');
-      reply += `${i + 1}️⃣ ${e.title}\n🕒 ${start}–${end}\n\n`;
+      reply += `${i + 1}️⃣ ${e.title}\n📅 ${dateStr}\n🕒 ${start}–${end}\n\n`;
     });
 
     await bot.sendMessage(msg.chat.id, reply.trim());

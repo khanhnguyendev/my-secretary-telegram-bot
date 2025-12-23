@@ -25,7 +25,13 @@ const CATEGORIES = [
       'reading',
       'homework',
       'practice',
-      'revision'
+      'revision',
+      'class',
+      'lesson',
+      'ielts',
+      'learning',
+      'học',
+      'lớp'
     ]
   },
   {
@@ -64,7 +70,13 @@ const CATEGORIES = [
     keywords: [
       'family time',
       'private time',
+      'private time (Shower)',
+      'private time (Massage)',
       'couple',
+      'couple time',
+      'couple time (Shower)',
+      'couple time (Massage)',
+      'date night',
       'bonding',
       'fb',
       'pt',
@@ -72,6 +84,26 @@ const CATEGORIES = [
       'sinh hoạt',
       'date',
       'anniversary'
+    ]
+  },
+  {
+    name: 'Household',
+    emoji: '🏠',
+    keywords: [
+      'clean',
+      'cleaning',
+      'dọn',
+      'rửa',
+      'xếp',
+      'quần áo',
+      'chén',
+      'nhà cửa',
+      'dọn dẹp',
+      'laundry',
+      'wash',
+      'fold',
+      'tidy',
+      'housework'
     ]
   },
   {
@@ -86,20 +118,6 @@ const CATEGORIES = [
       'development',
       'review',
       'report'
-    ]
-  },
-  {
-    name: 'Entertainment',
-    emoji: '🎮',
-    keywords: [
-      'movie',
-      'game',
-      'netflix',
-      'youtube',
-      'music',
-      'tv',
-      'entertainment',
-      'hobby'
     ]
   },
   {
@@ -133,7 +151,7 @@ function capitalize(text) {
   return text
     .trim()
     .replace(/\s+/g, ' ')
-    .replace(/^\w/, c => c.toUpperCase());
+    .replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function pad2(n) {
